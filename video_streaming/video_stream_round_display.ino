@@ -1,24 +1,25 @@
-#include <Arduino.h>
-#include <TFT_eSPI.h>
-#include <SPI.h>
 #include "esp_camera.h"
+#include <WiFi.h>
 
 #define CAMERA_MODEL_XIAO_ESP32S3 // Has PSRAM
 
 #include "camera_pins.h"
 
-// Width and height of round display
-const int camera_width = 240;
-const int camera_height = 240;
+// ===========================
+// Enter your WiFi credentials
+// ===========================
+const char* ssid = "fan";
+const char* password = "13501783558";
 
-TFT_eSPI tft = TFT_eSPI();
+void startCameraServer();
+void setupLedFlash(int pin);
 
 void setup() {
-  // put your setup code here, to run once:
   Serial.begin(115200);
-//  while(!Serial);
+  while(!Serial);
+  Serial.setDebugOutput(true);
+  Serial.println();
 
-  // Camera pinout
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -39,10 +40,9 @@ void setup() {
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
-//  config.frame_size = FRAMESIZE_UXGA;
-  config.frame_size = FRAMESIZE_240X240;
-//  config.pixel_format = PIXFORMAT_JPEG; // for streaming
-  config.pixel_format = PIXFORMAT_RGB565;
+  config.frame_size = FRAMESIZE_UXGA;
+  config.pixel_format = PIXFORMAT_JPEG; // for streaming
+  //config.pixel_format = PIXFORMAT_RGB565; // for face detection/recognition
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;
   config.jpeg_quality = 12;
@@ -74,34 +74,42 @@ void setup() {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
-  Serial.printf("Camera ready");
 
-  // Display initialization
-  tft.init();
-  tft.setRotation(1);
-  tft.fillScreen(TFT_WHITE);
+  sensor_t * s = esp_camera_sensor_get();
+  // initial sensors are flipped vertically and colors are a bit saturated
+  if (s->id.PID == OV3660_PID) {
+    s->set_vflip(s, 1); // flip it back
+    s->set_brightness(s, 1); // up the brightness just a bit
+    s->set_saturation(s, -2); // lower the saturation
+  }
+  // drop down frame size for higher initial frame rate
+  if(config.pixel_format == PIXFORMAT_JPEG){
+    s->set_framesize(s, FRAMESIZE_QVGA);
+  }
 
+// Setup LED FLash if LED pin is defined in camera_pins.h
+#if defined(LED_GPIO_NUM)
+  setupLedFlash(LED_GPIO_NUM);
+#endif
+
+  WiFi.begin(ssid, password);
+  WiFi.setSleep(false);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+
+  startCameraServer();
+
+  Serial.print("Camera Ready! Use 'http://");
+  Serial.print(WiFi.localIP());
+  Serial.println("' to connect");
 }
 
 void loop() {
-  // Obtaining camera images
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("Camera capture failed");
-    delay(10000);
-    return;
-  }
-
-  // Decode JPEG images
-  uint8_t* buf = fb->buf;
-  uint32_t len = fb->len;
-  tft.startWrite();
-  tft.setAddrWindow(0, 0, camera_width, camera_height);
-  tft.pushColors(buf, len);
-  tft.endWrite();
-
-  // Release image memory
-  esp_camera_fb_return(fb);
-
-  delay(10);
+  // Do nothing. Everything is done in another task by the web server
+  delay(10000);
 }
