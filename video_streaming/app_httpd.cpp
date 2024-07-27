@@ -19,7 +19,6 @@
 #include "esp32-hal-ledc.h"
 #include "sdkconfig.h"
 #include "camera_index.h"
-#include "index_ov2640.html.gz.h"
 
 #if defined(ARDUINO_ARCH_ESP32) && defined(CONFIG_ARDUHAL_ESP_LOG)
 #include "esp32-hal-log.h"
@@ -1184,21 +1183,6 @@ static esp_err_t win_handler(httpd_req_t *req)
     return httpd_resp_send(req, NULL, 0);
 }
 
-// Handler to serve the compressed HTML page
-static esp_err_t index_html_handler(httpd_req_t *req) {
-    // Set the content type to HTML
-    httpd_resp_set_type(req, "text/html");
-
-    // Set the content encoding to gzip
-    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
-
-    // Send the gzipped HTML content
-    httpd_resp_send(req, (const char *)index_ov2640_html_gz, index_ov2640_html_gz_len);
-
-    return ESP_OK;
-}
-
-// we will have a new index_handler here
 static esp_err_t index_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html");
@@ -1226,7 +1210,7 @@ void startCameraServer()
     httpd_uri_t index_uri = {
         .uri = "/",
         .method = HTTP_GET,
-        .handler = index_html_handler,
+        .handler = index_handler,
         .user_ctx = NULL
 #ifdef CONFIG_HTTPD_WS_SUPPORT
         ,
